@@ -2,9 +2,8 @@ import json
 from typing import Optional
 
 import httpx
-from aidial_sdk.chat_completion import Role, Request, Message, Stage, Choice
+from aidial_sdk.chat_completion import Choice, Message, Request, Role, Stage
 from pydantic import StrictStr
-
 
 _UMS_CONVERSATION_ID = "ums_conversation_id"
 
@@ -15,64 +14,103 @@ class UMSAgentGateway:
         self.ums_agent_endpoint = ums_agent_endpoint
 
     async def response(
-            self,
-            choice: Choice,
-            stage: Stage,
-            request: Request,
-            additional_instructions: Optional[str]
+        self,
+        choice: Choice,
+        stage: Stage,
+        request: Request,
+        additional_instructions: Optional[str],
     ) -> Message:
-        #TODO:
-        # ⚠️ Important point: we need to provide Agent with conversation history that is related to this particular
-        #    Agent, otherwise it will confuse the Agent.
-        # 1. Get UMS conversation id. UMS Agent is custom implementation that is storing all the conversation on its
-        #    side and without created conversation we are unable to communicate with UMS agent.
-        #    The `ums_conversation_id` with be persisted in some of assistant message state (if conversation was created),
-        #    additionally we will have 1-to-1 relation (one our conversation will have one conversation on the UMS agent side)
-        # 2. If no conversation id found then create new conversation and set it to choice state as dict {_UMS_CONVERSATION_ID: {id}}
-        # 3. Get last message (the last always will be the user message) and make augmentation with additional instructions
-        # 4. Call UMS Agent
-        # 5. return assistant message
-        raise NotImplementedError()
+        """Ensure UMS conversation context, call UMS agent, and return output."""
 
+        conversation_id = self.__get_ums_conversation_id(request)
+        if not conversation_id:
+            conversation_id = await self.__create_ums_conversation()
+            choice.set_state({_UMS_CONVERSATION_ID: conversation_id})
+
+        last_message = request.messages[-1]
+        user_message = last_message.content or ""
+        if additional_instructions:
+            user_message = (
+                f"{user_message}\n\n"
+                f"Additional instructions:\n{additional_instructions}"
+            )
+
+        content = await self.__call_ums_agent(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            stage=stage,
+        )
+
+        return Message(
+            role=Role.ASSISTANT,
+            content=StrictStr(content),
+        )
 
     def __get_ums_conversation_id(self, request: Request) -> Optional[str]:
         """Extract UMS conversation ID from previous messages if it exists"""
-        #TODO:
-        # Iterate through message history, check if custom content with state is present and if it contains
-        # _UMS_CONVERSATION_ID, if yes then return it, otherwise return None
-        raise NotImplementedError()
+
+        for message in request.messages:
+            custom_content = message.custom_content
+            if not custom_content or not custom_content.state:
+                continue
+            if (
+                isinstance(custom_content.state, dict)
+                and _UMS_CONVERSATION_ID in custom_content.state
+            ):
+                return custom_content.state.get(_UMS_CONVERSATION_ID)
+        return None
 
     async def __create_ums_conversation(self) -> str:
         """Create a new conversation on UMS agent side"""
-        #TODO:
-        # 1. Create async context manager with httpx.AsyncClient()
-        # 2. Make POST request to create conversation https://github.com/khshanovskyi/ai-dial-ums-ui-agent/blob/completed/agent/app.py#L159
-        # 3. Get response json and return `id` from it
-        raise NotImplementedError()
+
+        url = f"{self.ums_agent_endpoint.rstrip('/')}/conversations"
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json={})
+            response.raise_for_status()
+            data = response.json()
+        return data.get("id")
 
     async def __call_ums_agent(
-            self,
-            conversation_id: str,
-            user_message: str,
-            stage: Stage
+        self, conversation_id: str, user_message: str, stage: Stage
     ) -> str:
         """Call UMS agent and stream the response"""
-        #TODO:
-        # 1. Create async context manager with httpx.AsyncClient()
-        # 2. Make POST request to chat https://github.com/khshanovskyi/ai-dial-ums-ui-agent/blob/completed/agent/app.py#L216
-        #    it applies message as request body: {"message": { "role": "user","content": user_message},"stream": True}
-        #    streaming must be enabled
-        # 3. Now is the time to recall the first practice with console chat when we parsed raw streaming responses,
-        #    don't worry, hopefully we made response in openai compatible (the same as in openai spec).
-        #    Make async loop through `response.aiter_lines()` and:
-        #       - Cut the `data: `. The streaming chunks will be returned in such format:
-        #         data: {'choices': [{'delta': {'content': 'chunk 1'}}]}
-        #         data: {'choices': [{'delta': {'content': 'chunk 2'}}]}
-        #         data: {'choices': [{'delta': {'content': 'chunk ...'}}]}
-        #         data: {'choices': [{'delta': {'content': 'chunk n'}}]}
-        #         data: {'conversation_id': '{conversation_id}'}
-        #         data: [DONE]
-        #       - If in result you have [DONE] - that means that streaming is finished an you can break the loop
-        #       - Make dict from json
-        #       - Get content, accumulate it to return after and append content chunks to the stage
-        raise NotImplementedError()
+
+        url = f"{self.ums_agent_endpoint.rstrip('/')}/conversations/{conversation_id}/chat"
+        payload = {
+            "message": {
+                "role": "user",
+                "content": user_message,
+            },
+            "stream": True,
+        }
+
+        content = ""
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for raw_line in response.aiter_lines():
+                    if not raw_line:
+                        continue
+                    line = raw_line.strip()
+                    if line.startswith("data:"):
+                        line = line[len("data:") :].strip()
+                    if not line:
+                        continue
+                    if line == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    choices = data.get("choices")
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+                    chunk = delta.get("content")
+                    if chunk:
+                        stage.append_content(chunk)
+                        content += chunk
+
+        return content
