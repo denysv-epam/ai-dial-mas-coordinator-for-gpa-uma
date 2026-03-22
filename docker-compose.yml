@@ -1,6 +1,7 @@
 services:
   themes:
     image: epam/ai-dial-chat-themes:development
+    platform: linux/amd64
     ports:
       - "3001:8080"
 
@@ -8,7 +9,7 @@ services:
     ports:
       - "3000:3000"
     image: epam/ai-dial-chat:development
-#    platform: linux/amd64
+    platform: linux/amd64
     depends_on:
       - themes
       - core
@@ -46,30 +47,38 @@ services:
     ports:
       - "8080:8080"
     image: epam/ai-dial-core:development
+    platform: linux/arm64
     environment:
-      'AIDIAL_SETTINGS': '/opt/settings/settings.json'
-      'JAVA_OPTS': '-Dgflog.config=/opt/settings/gflog.xml'
-      'LOG_DIR': '/app/log'
-      'STORAGE_DIR': '/app/data'
-      'aidial.config.files': '["/opt/config/config.json", "/opt/config/keys.json"]'
-      'aidial.storage.overrides': '{ "jclouds.filesystem.basedir": "data" }'
-      'aidial.redis.singleServerConfig.address': 'redis://redis:6379'
-      'LOG_LEVEL': "DEBUG"
+      "AIDIAL_SETTINGS": "/opt/settings/settings.json"
+      "JAVA_OPTS": "-Dgflog.config=/opt/settings/gflog.xml"
+      "LOG_DIR": "/app/log"
+      "STORAGE_DIR": "/app/data"
+      "aidial.config.files": '["/opt/config/config.json", "/opt/config/keys.json"]'
+      "aidial.storage.overrides": '{ "jclouds.filesystem.basedir": "data" }'
+      "aidial.redis.singleServerConfig.address": "redis://redis:6379"
+      "LOG_LEVEL": "DEBUG"
     depends_on:
       - redis
     volumes:
       - ./settings:/opt/settings
       - ${DIAL_DIR:-.}/core:/opt/config
-      - ${DIAL_DIR:-.}/core-logs/:/app/log
-      - ${DIAL_DIR:-.}/core-data/:/app/data
+      - core-logs:/app/log
+      - core-data:/app/data
 
   adapter-dial:
     image: epam/ai-dial-adapter-dial:development
+    platform: linux/arm64
     environment:
       DIAL_URL: "http://core:8080"
       LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
-# UMS
+  # UMS
   userservice:
     image: khshanovskyi/mockuserservice:latest
     ports:
@@ -80,6 +89,12 @@ services:
       - USER_COUNT=1000
     volumes:
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   ums-mcp-server:
     depends_on:
@@ -111,7 +126,7 @@ services:
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
 
-# General-purpose Agent
+  # General-purpose Agent
   python-interpreter-mcp-server:
     image: khshanovskyi/python-code-interpreter-mcp-server:latest
     ports:
@@ -142,10 +157,14 @@ services:
     ports:
       - "8052:5000"
     environment:
-      - DIAL_API_KEY=${DIAL_API_KEY}
+      - DIAL_API_KEY=dial_api_key
       - DEPLOYMENT_NAME=gpt-4o
       - DIAL_ENDPOINT=http://core:8080
       - PYINTERPRETER_MCP_URL=http://python-interpreter-mcp-server:8000/mcp
       - DDG_MCP_URL=http://ddg-search-mcp-server:8000/mcp
     volumes:
       - ./data:/app/data
+
+volumes:
+  core-logs:
+  core-data:
