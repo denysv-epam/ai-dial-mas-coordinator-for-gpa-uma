@@ -128,6 +128,12 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
 <details>
 <summary>Task 2</summary>
 
+Before you start, create your local keys file:
+```bash
+cp core/keys.template.json core/keys.json
+```
+Then replace `{YOUR_DIAL_API_KEY}` with your real key in `core/keys.json`.
+
 1. Add GPT and DALL-E models to `core/config.json`:
     ```json
     {
@@ -138,8 +144,8 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
           "type": "chat"
         },
         "dall-e-3": {
-          "displayName": "DALL-E",
-          "endpoint": "http://adapter-dial:5000/openai/deployments/dall-e-3/chat/completions",
+          "displayName": "GPT Image 1.5",
+          "endpoint": "http://adapter-dial:5000/openai/deployments/gpt-image-1.5-2025-12-16/chat/completions",
           "iconUrl": "http://localhost:3001/gpt3.svg",
           "type": "chat"
         }
@@ -160,7 +166,7 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
         "dall-e-3": {
           "upstreams": [
             {
-              "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/dall-e-3/chat/completions",
+              "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-image-1.5-2025-12-16/chat/completions",
               "key": "{YOUR_DIAL_API_KEY}"
             }
           ]
@@ -233,4 +239,3 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
 </details>
 
 ---
-
