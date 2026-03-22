@@ -6,7 +6,7 @@
 
 ---
 
-## AFTER ALL THE TASKS DONE - DON'T FORGET TO REMOVE API KEYs FROM core/config.json
+## AFTER ALL THE TASKS DONE - DON'T FORGET TO REMOVE API KEYs FROM core/keys.json
 
 ### Task 1: Preparation of docker compose with all the services:
 <details>
@@ -128,14 +128,28 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
 <details>
 <summary>Task 2</summary>
 
-1. Add GPT and DALL-E models:
+1. Add GPT and DALL-E models to `core/config.json`:
     ```json
     {
         "gpt-4o": {
           "displayName": "GPT 4o",
           "endpoint": "http://adapter-dial:5000/openai/deployments/gpt-4o/chat/completions",
           "iconUrl": "http://localhost:3001/gpt4.svg",
-          "type": "chat",
+          "type": "chat"
+        },
+        "dall-e-3": {
+          "displayName": "DALL-E",
+          "endpoint": "http://adapter-dial:5000/openai/deployments/dall-e-3/chat/completions",
+          "iconUrl": "http://localhost:3001/gpt3.svg",
+          "type": "chat"
+        }
+      }
+    ```
+2. Add upstreams and API keys to `core/keys.json`:
+    ```json
+    {
+      "models": {
+        "gpt-4o": {
           "upstreams": [
             {
               "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-4o/chat/completions",
@@ -144,10 +158,6 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
           ]
         },
         "dall-e-3": {
-          "displayName": "DALL-E",
-          "endpoint": "http://adapter-dial:5000/openai/deployments/dall-e-3/chat/completions",
-          "iconUrl": "http://localhost:3001/gpt3.svg",
-          "type": "chat",
           "upstreams": [
             {
               "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/dall-e-3/chat/completions",
@@ -156,8 +166,9 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
           ]
         }
       }
+    }
     ```
-2. Add `general-purpose-agent` to applications:
+3. Add `general-purpose-agent` to applications:
     ```json
     {
       "general-purpose-agent": {
@@ -169,7 +180,7 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
       }
     }
     ```
-3. Restart `core` service in Docker and check if models are available to use as well as GPA and test that they are woking
+4. Restart `core` service in Docker and check if models are available to use as well as GPA and test that they are woking
 
 </details>
 
@@ -222,5 +233,4 @@ Prepare [docker-compose](docker-compose.yml) with all the services:
 </details>
 
 ---
-
 
